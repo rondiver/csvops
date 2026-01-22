@@ -1,20 +1,6 @@
 # csvops
 
-A fast CLI tool for CSV profiling and **data drift detection**, written in Rust.
-
-## Why Drift Detection?
-
-CSV profiling tools are common. What's missing is automated detection of *how your data changes over time*.
-
-**Drift detection catches silent failures:**
-- A vendor quietly changes their export format
-- An upstream team stops populating a field
-- A data pipeline starts dropping records
-- Numeric distributions shift unexpectedly
-
-These issues don't throw errors — they just make your dashboards wrong, your ML models degrade, and your reports misleading. By the time someone notices, the damage is done.
-
-`csvops drift` analyzes your data across time buckets and alerts you when metrics change significantly — before problems compound.
+A fast, local CLI for inspecting CSV files and surfacing structural issues. Designed for operators who need answers immediately — no schemas, notebooks, or setup.
 
 ## Installation
 
@@ -32,88 +18,56 @@ cargo build --release
 ## Quick Start
 
 ```bash
-# Profile a CSV file
+# Inspect a CSV file
 csvops profile data.csv
 
-# Detect drift over time (the key feature)
-csvops drift data.csv --time-col created_at --grain week
+# Output as JSON for scripting
+csvops profile data.csv --json
 ```
+
+## What It Does
+
+**One command. Immediate answers.**
+
+- Detects delimiter automatically (comma, tab, pipe, semicolon)
+- Infers column types (integer, float, boolean, datetime, string)
+- Counts missing values and flags high missing rates
+- Calculates statistics for numeric columns
+- Identifies likely ID columns, constants, and categorical fields
+- Surfaces mixed-type columns and potential outliers
+
+No configuration files. No database connections. No cloud accounts.
 
 ## Usage
 
-### Drift Command
-
-Detect data drift over time by analyzing metrics across time buckets:
-
-```bash
-csvops drift data.csv --time-col created_at --grain week
-```
-
-Options:
-- `--time-col <name>` - Column containing timestamps (required)
-- `--grain <day|week|month>` - Time bucket granularity (default: day)
-- `--json` - Output as JSON
-- `--delimiter <char>` - Specify delimiter
-- `--no-header` - Treat first row as data
-- `--missing <tokens>` - Custom missing value tokens
-- `--no-color` - Disable colored output
-
-Drift warnings trigger when:
-- Row count changes >50% between periods
-- Missing rate changes >10 percentage points
-- Numeric mean changes >20%
-
 ### Profile Command
-
-Analyze a CSV file and display statistics for each column:
 
 ```bash
 csvops profile data.csv
 ```
 
 Options:
-- `--json` - Output as JSON
-- `--delimiter <char>` - Specify delimiter (auto-detected by default)
-- `--no-header` - Treat first row as data, not header
-- `--missing <tokens>` - Custom missing value tokens (comma-separated)
-- `--sample-size <n>` - Sample size for statistics (default: 10000)
-- `--no-color` - Disable colored output
+- `--json` — Output as JSON
+- `--delimiter <char>` — Specify delimiter (auto-detected by default)
+- `--no-header` — Treat first row as data
+- `--missing <tokens>` — Custom missing value tokens (comma-separated)
+- `--sample-size <n>` — Sample size for statistics (default: 10000)
+- `--no-color` — Disable colored output
 
-Example:
+### Drift Command
+
+For files with a time column, surface how data changes across time periods:
 
 ```bash
-csvops profile sales.csv --json
-csvops profile data.tsv --delimiter $'\t'
-csvops profile data.csv --missing "NA,N/A,MISSING"
+csvops drift data.csv --time-col created_at --grain week
 ```
 
-## Features
+This groups rows by time bucket and highlights shifts in row counts, missing rates, and numeric distributions.
 
-### Drift Detection
-
-- **Time bucketing**: Group data by day, week (ISO), or month
-- **Metrics tracking**: Row counts, missing rates, numeric means per bucket
-- **Automatic alerts**: Warnings when metrics deviate significantly between periods
-- **Multiple formats**: Supports ISO 8601, US dates, and Unix timestamps
-
-### Profiling
-
-- **Auto-detection**: Automatically detects delimiter (comma, tab, pipe, semicolon)
-- **Type inference**: Detects integer, float, boolean, datetime, and string types
-- **Missing values**: Recognizes NA, N/A, NULL, None, -, NaN (configurable)
-- **Statistics**: Mean, std dev, min, max, percentiles for numeric columns
-- **Cardinality**: Exact count for ≤10,000 distinct values, HyperLogLog estimation for higher
-- **Top values**: Tracks most frequent values using Space-Saving algorithm
-- **Heuristics**: Detects ID columns, outliers, constant columns, mixed types
-
-### Output
-
-Terminal output with colored warnings:
-- 🔴 **Critical**: All values missing, empty file
-- 🟡 **Warning**: High missing rate, mixed types, outliers detected
-- 🔵 **Info**: ID column detected, constant column, low/high cardinality
-
-JSON output for programmatic use.
+Options:
+- `--time-col <name>` — Column containing timestamps (required)
+- `--grain <day|week|month>` — Bucket granularity (default: day)
+- `--json` — Output as JSON
 
 ## Example Output
 
@@ -129,7 +83,7 @@ File Statistics
 
 Warnings
 ──────────────────────────────────────────────────
-  WARNING [revenue] 5 potential outliers detected (>10×IQR from p1/p99)
+  WARNING [revenue] Potential outliers detected
   INFO [customer_id] Appears to be an identifier column
   INFO [status] Low cardinality (3 distinct): may be categorical
 
@@ -145,18 +99,20 @@ Column Details
     Max:          99,999.99
 ```
 
-## Supported Date Formats
+## Supported Formats
 
-- ISO 8601: `2024-01-15`, `2024-01-15T10:30:00`, `2024-01-15T10:30:00Z`
-- US format: `01/15/2024`, `1/15/24`
-- Unix epoch: `1705334400` (seconds), `1705334400000` (milliseconds)
+**Delimiters:** comma, tab, pipe, semicolon (auto-detected)
+
+**Date formats:** ISO 8601, US (MM/DD/YYYY), Unix timestamps
+
+**Missing values:** empty, NA, N/A, NULL, None, -, NaN (configurable)
 
 ## Performance
 
-- Streaming processing - handles large files with constant memory
+- Streaming — handles large files with constant memory
 - Reservoir sampling for percentile estimation
 - HyperLogLog for high-cardinality columns
-- Single-pass statistics via Welford's algorithm
+- Single-pass statistics
 
 ## License
 
