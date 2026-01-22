@@ -29,12 +29,16 @@ csvops profile data.csv --json
 
 **One command. Immediate answers.**
 
-- Detects delimiter automatically (comma, tab, pipe, semicolon)
-- Infers column types (integer, float, boolean, datetime, string)
-- Counts missing values and flags high missing rates
-- Calculates statistics for numeric columns
-- Identifies likely ID columns, constants, and categorical fields
-- Surfaces mixed-type columns and potential outliers
+- **Delimiter detection** — Reads first 8KB, scores consistency across comma, tab, pipe, semicolon
+- **Type inference** — Classifies each column as integer, float, boolean, datetime, or string based on value patterns
+- **Missing value detection** — Counts empties, NA, N/A, NULL, None, NaN; reports percentage per column
+- **Numeric statistics** — Min, max, mean, standard deviation, percentiles (p25, p50, p75, p99) via streaming algorithms
+- **Cardinality estimation** — Exact distinct counts up to 10K; HyperLogLog approximation above that
+- **Top values** — Most frequent values per column, useful for spotting unexpected categories or data entry errors
+- **ID column detection** — Flags columns that look like identifiers (high uniqueness, UUID patterns, naming conventions)
+- **Constant detection** — Flags columns where every row has the same value
+- **Mixed-type warnings** — Alerts when a column contains multiple data types (e.g., integers mixed with strings)
+- **Outlier flagging** — Surfaces numeric values far outside the normal range
 
 No configuration files. No database connections. No cloud accounts.
 
