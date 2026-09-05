@@ -1,25 +1,34 @@
-use chrono::{Datelike, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
 use std::sync::LazyLock;
 
 use crate::cli::TimeGrain;
 
 // Date parsing patterns
-static ISO_DATE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(\d{4})-(\d{2})-(\d{2})").unwrap()
-});
+static ISO_DATE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(\d{4})-(\d{2})-(\d{2})$").unwrap());
 
-static US_DATE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(\d{1,2})/(\d{1,2})/(\d{2,4})").unwrap()
-});
+static US_DATE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(\d{1,2})/(\d{1,2})/(\d{2}|\d{4})$").unwrap());
 
-static UNIX_EPOCH: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(1\d{9,12})$").unwrap()
-});
+static UNIX_EPOCH: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(-?\d{1,10}|-?\d{13})$").unwrap());
 
 /// Parses a datetime string into a NaiveDateTime
 pub fn parse_datetime(value: &str) -> Option<NaiveDateTime> {
     let trimmed = value.trim();
+
+    // Offset-bearing timestamps use UTC buckets. Never slice an unvalidated
+    // date string: truncated timestamps and Unicode suffixes are valid inputs
+    // to reject, not reasons to panic.
+    if let Ok(dt) = DateTime::parse_from_rfc3339(trimmed) {
+        return Some(dt.naive_utc());
+    }
+    for format in ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%d %H:%M:%S%.f"] {
+        if let Ok(dt) = NaiveDateTime::parse_from_str(trimmed, format) {
+            return Some(dt);
+        }
+    }
 
     // Try ISO 8601 format first
     if let Some(caps) = ISO_DATE.captures(trimmed) {
@@ -29,18 +38,7 @@ pub fn parse_datetime(value: &str) -> Option<NaiveDateTime> {
 
         let date = NaiveDate::from_ymd_opt(year, month, day)?;
 
-        // Check if there's a time component
-        if trimmed.len() > 10 && trimmed.chars().nth(10) == Some('T') {
-            // Try parsing full ISO datetime
-            if let Ok(dt) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S") {
-                return Some(dt);
-            }
-            if let Ok(dt) = NaiveDateTime::parse_from_str(&trimmed[..19], "%Y-%m-%dT%H:%M:%S") {
-                return Some(dt);
-            }
-        }
-
-        return Some(date.and_hms_opt(0, 0, 0)?);
+        return date.and_hms_opt(0, 0, 0);
     }
 
     // Try US date format (MM/DD/YYYY)
@@ -55,7 +53,7 @@ pub fn parse_datetime(value: &str) -> Option<NaiveDateTime> {
         }
 
         let date = NaiveDate::from_ymd_opt(year, month, day)?;
-        return Some(date.and_hms_opt(0, 0, 0)?);
+        return date.and_hms_opt(0, 0, 0);
     }
 
     // Try Unix epoch
@@ -63,13 +61,12 @@ pub fn parse_datetime(value: &str) -> Option<NaiveDateTime> {
         let timestamp: i64 = caps.get(1)?.as_str().parse().ok()?;
 
         // Determine if seconds or milliseconds
-        let seconds = if timestamp > 1_000_000_000_000 {
-            timestamp / 1000
+        return if trimmed.trim_start_matches('-').len() == 13 {
+            Utc.timestamp_millis_opt(timestamp).single()
         } else {
-            timestamp
-        };
-
-        return Utc.timestamp_opt(seconds, 0).single().map(|dt| dt.naive_utc());
+            Utc.timestamp_opt(timestamp, 0).single()
+        }
+        .map(|dt| dt.naive_utc());
     }
 
     None
@@ -202,20 +199,29 @@ mod tests {
 
     #[test]
     fn test_bucket_key_day() {
-        let dt = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let dt = NaiveDate::from_ymd_opt(2024, 1, 15)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
         assert_eq!(get_bucket_key(dt, TimeGrain::Day), "2024-01-15");
     }
 
     #[test]
     fn test_bucket_key_week() {
-        let dt = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let dt = NaiveDate::from_ymd_opt(2024, 1, 15)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
         let key = get_bucket_key(dt, TimeGrain::Week);
         assert!(key.starts_with("2024-W"));
     }
 
     #[test]
     fn test_bucket_key_month() {
-        let dt = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let dt = NaiveDate::from_ymd_opt(2024, 1, 15)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
         assert_eq!(get_bucket_key(dt, TimeGrain::Month), "2024-01");
     }
 

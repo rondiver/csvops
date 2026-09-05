@@ -1,9 +1,16 @@
 [package]
 name = "csvops"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
-description = "CSV profiling and drift detection CLI tool"
-authors = ["CSV Ops Team"]
+rust-version = "1.94"
+description = "Inspect CSV data quality and compare changes across time periods, locally"
+authors = ["Ron Diver"]
+license = "MIT"
+repository = "https://github.com/rondiver/csvops"
+readme = "README.md"
+keywords = ["csv", "cli", "data-quality", "profiling", "drift"]
+categories = ["command-line-utilities"]
+include = ["src/**", "tests/**", "examples/**", "docs/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "CHANGELOG.md"]
 
 [[bin]]
 name = "csvops"

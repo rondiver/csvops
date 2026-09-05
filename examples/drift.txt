@@ -1,0 +1,20 @@
+Drift Analysis
+────────────────────────────────────────────────────────────
+  Time Column: created_at
+  Grain:       Week
+  Buckets:     2
+  Analyzed:    12 rows
+  Skipped:     0 invalid timestamps, 0 malformed rows
+
+Drift Warnings
+────────────────────────────────────────────────────────────
+  WARNING Row count changed 100% between 2026-W35 and 2026-W36 (4 -> 8)
+  WARNING [quantity] Missing rate changed from 0.0% to 75.0% between 2026-W35 and 2026-W36
+  WARNING [quoted_total] Mean changed 100.0% between 2026-W35 and 2026-W36 (100.00 -> 200.00)
+
+Bucket Summary
+────────────────────────────────────────────────────────────
+  Bucket                Rows
+  ─────────────── ──────────
+  2026-W35                 4
+  2026-W36                 8

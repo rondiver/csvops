@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 /// Default reservoir size for sampling
 pub const DEFAULT_RESERVOIR_SIZE: usize = 10_000;
@@ -9,6 +9,7 @@ pub struct ReservoirSampler<T> {
     reservoir: Vec<T>,
     capacity: usize,
     count: usize,
+    rng: StdRng,
 }
 
 impl<T: Clone> Default for ReservoirSampler<T> {
@@ -24,6 +25,7 @@ impl<T: Clone> ReservoirSampler<T> {
             reservoir: Vec::with_capacity(capacity),
             capacity,
             count: 0,
+            rng: StdRng::seed_from_u64(0),
         }
     }
 
@@ -36,8 +38,7 @@ impl<T: Clone> ReservoirSampler<T> {
             self.reservoir.push(value);
         } else {
             // Reservoir full, randomly replace
-            let mut rng = rand::thread_rng();
-            let j = rng.gen_range(0..self.count);
+            let j = self.rng.gen_range(0..self.count);
             if j < self.capacity {
                 self.reservoir[j] = value;
             }
@@ -50,11 +51,13 @@ impl<T: Clone> ReservoirSampler<T> {
     }
 
     /// Returns the total count of values seen
+    #[cfg(test)]
     pub fn total_count(&self) -> usize {
         self.count
     }
 
     /// Returns whether the reservoir is full
+    #[cfg(test)]
     pub fn is_full(&self) -> bool {
         self.reservoir.len() >= self.capacity
     }
@@ -88,6 +91,7 @@ impl NumericSampler {
     }
 
     /// Returns the total count
+    #[cfg(test)]
     pub fn total_count(&self) -> usize {
         self.sampler.total_count()
     }
@@ -132,6 +136,7 @@ impl NumericSampler {
     }
 
     /// Returns the median (p50)
+    #[cfg(test)]
     pub fn median(&mut self) -> Option<f64> {
         self.percentile(50.0)
     }

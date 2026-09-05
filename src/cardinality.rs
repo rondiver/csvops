@@ -105,7 +105,8 @@ impl CardinalityEstimator {
         };
 
         // Calculate harmonic mean of 2^(-register)
-        let sum: f64 = self.hll_registers
+        let sum: f64 = self
+            .hll_registers
             .iter()
             .map(|&r| 2.0_f64.powi(-(r as i32)))
             .sum();
@@ -138,6 +139,7 @@ impl CardinalityEstimator {
     }
 
     /// Returns the total count of values seen
+    #[cfg(test)]
     pub fn total_count(&self) -> usize {
         self.count
     }

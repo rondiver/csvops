@@ -1,0 +1,307 @@
+{
+  "file": {
+    "path": "examples/jobs.csv",
+    "size_bytes": 629,
+    "row_count": 12,
+    "skipped_rows": 0,
+    "column_count": 6,
+    "delimiter": ",",
+    "has_header": true
+  },
+  "warnings": [
+    {
+      "severity": "info",
+      "code": "POTENTIAL_ID_COLUMN",
+      "column": "job_id",
+      "message": "Appears to be an identifier column"
+    }
+  ],
+  "columns": [
+    {
+      "name": "created_at",
+      "type": "datetime",
+      "missing_count": 0,
+      "missing_percentage": 0.0,
+      "cardinality": 8,
+      "cardinality_exact": true,
+      "non_finite_count": 0,
+      "string_stats": {
+        "min_length": 10,
+        "max_length": 10
+      },
+      "top_values": [
+        {
+          "value": "2026-08-31",
+          "count": 2
+        },
+        {
+          "value": "2026-09-01",
+          "count": 2
+        },
+        {
+          "value": "2026-09-02",
+          "count": 2
+        },
+        {
+          "value": "2026-09-03",
+          "count": 2
+        },
+        {
+          "value": "2026-08-24",
+          "count": 1
+        },
+        {
+          "value": "2026-08-25",
+          "count": 1
+        },
+        {
+          "value": "2026-08-26",
+          "count": 1
+        },
+        {
+          "value": "2026-08-27",
+          "count": 1
+        }
+      ],
+      "heuristics": {
+        "is_id_column": false,
+        "is_constant": false,
+        "is_mostly_missing": false,
+        "has_mixed_types": false,
+        "has_outliers": false,
+        "outlier_count": 0
+      }
+    },
+    {
+      "name": "job_id",
+      "type": "string",
+      "missing_count": 0,
+      "missing_percentage": 0.0,
+      "cardinality": 12,
+      "cardinality_exact": true,
+      "non_finite_count": 0,
+      "string_stats": {
+        "min_length": 4,
+        "max_length": 4
+      },
+      "top_values": [
+        {
+          "value": "J001",
+          "count": 1
+        },
+        {
+          "value": "J002",
+          "count": 1
+        },
+        {
+          "value": "J003",
+          "count": 1
+        },
+        {
+          "value": "J004",
+          "count": 1
+        },
+        {
+          "value": "J005",
+          "count": 1
+        },
+        {
+          "value": "J006",
+          "count": 1
+        },
+        {
+          "value": "J007",
+          "count": 1
+        },
+        {
+          "value": "J008",
+          "count": 1
+        },
+        {
+          "value": "J009",
+          "count": 1
+        },
+        {
+          "value": "J010",
+          "count": 1
+        }
+      ],
+      "heuristics": {
+        "is_id_column": true,
+        "is_constant": false,
+        "is_mostly_missing": false,
+        "has_mixed_types": false,
+        "has_outliers": false,
+        "outlier_count": 0
+      }
+    },
+    {
+      "name": "quantity",
+      "type": "integer",
+      "missing_count": 6,
+      "missing_percentage": 50.0,
+      "cardinality": 3,
+      "cardinality_exact": true,
+      "non_finite_count": 0,
+      "numeric_stats": {
+        "count": 6,
+        "sample_size": 6,
+        "mean": 1000.0,
+        "std_dev": 126.49110640673517,
+        "min": 800.0,
+        "max": 1200.0,
+        "p25": 1000.0,
+        "p50": 1000.0,
+        "p75": 1000.0,
+        "p99": 1190.0
+      },
+      "string_stats": {
+        "min_length": 3,
+        "max_length": 4
+      },
+      "top_values": [
+        {
+          "value": "1000",
+          "count": 4
+        },
+        {
+          "value": "1200",
+          "count": 1
+        },
+        {
+          "value": "800",
+          "count": 1
+        }
+      ],
+      "heuristics": {
+        "is_id_column": false,
+        "is_constant": false,
+        "is_mostly_missing": false,
+        "has_mixed_types": false,
+        "has_outliers": false,
+        "outlier_count": 0
+      }
+    },
+    {
+      "name": "quoted_total",
+      "type": "integer",
+      "missing_count": 0,
+      "missing_percentage": 0.0,
+      "cardinality": 6,
+      "cardinality_exact": true,
+      "non_finite_count": 0,
+      "numeric_stats": {
+        "count": 12,
+        "sample_size": 12,
+        "mean": 166.66666666666666,
+        "std_dev": 51.40451577852127,
+        "min": 80.0,
+        "max": 220.0,
+        "p25": 115.0,
+        "p50": 190.0,
+        "p75": 200.0,
+        "p99": 220.0
+      },
+      "string_stats": {
+        "min_length": 2,
+        "max_length": 3
+      },
+      "top_values": [
+        {
+          "value": "200",
+          "count": 4
+        },
+        {
+          "value": "100",
+          "count": 2
+        },
+        {
+          "value": "180",
+          "count": 2
+        },
+        {
+          "value": "220",
+          "count": 2
+        },
+        {
+          "value": "120",
+          "count": 1
+        },
+        {
+          "value": "80",
+          "count": 1
+        }
+      ],
+      "heuristics": {
+        "is_id_column": false,
+        "is_constant": false,
+        "is_mostly_missing": false,
+        "has_mixed_types": false,
+        "has_outliers": false,
+        "outlier_count": 0
+      }
+    },
+    {
+      "name": "service",
+      "type": "string",
+      "missing_count": 0,
+      "missing_percentage": 0.0,
+      "cardinality": 2,
+      "cardinality_exact": true,
+      "non_finite_count": 0,
+      "string_stats": {
+        "min_length": 12,
+        "max_length": 13
+      },
+      "top_values": [
+        {
+          "value": "perfect bind",
+          "count": 6
+        },
+        {
+          "value": "saddle stitch",
+          "count": 6
+        }
+      ],
+      "heuristics": {
+        "is_id_column": false,
+        "is_constant": false,
+        "is_mostly_missing": false,
+        "has_mixed_types": false,
+        "has_outliers": false,
+        "outlier_count": 0
+      }
+    },
+    {
+      "name": "status",
+      "type": "string",
+      "missing_count": 0,
+      "missing_percentage": 0.0,
+      "cardinality": 2,
+      "cardinality_exact": true,
+      "non_finite_count": 0,
+      "string_stats": {
+        "min_length": 8,
+        "max_length": 12
+      },
+      "top_values": [
+        {
+          "value": "approved",
+          "count": 6
+        },
+        {
+          "value": "needs review",
+          "count": 6
+        }
+      ],
+      "heuristics": {
+        "is_id_column": false,
+        "is_constant": false,
+        "is_mostly_missing": false,
+        "has_mixed_types": false,
+        "has_outliers": false,
+        "outlier_count": 0
+      }
+    }
+  ]
+}

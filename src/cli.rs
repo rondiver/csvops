@@ -28,7 +28,7 @@ pub struct ProfileArgs {
     pub json: bool,
 
     /// Delimiter character (auto-detected if not specified)
-    #[arg(short, long)]
+    #[arg(short, long, value_parser = parse_delimiter)]
     pub delimiter: Option<char>,
 
     /// Treat first row as data, not header
@@ -40,7 +40,7 @@ pub struct ProfileArgs {
     pub missing: Option<Vec<String>>,
 
     /// Sample size for statistics (default: 10000)
-    #[arg(long, default_value = "10000")]
+    #[arg(long, default_value = "10000", value_parser = parse_sample_size)]
     pub sample_size: usize,
 
     /// Disable colored output
@@ -66,7 +66,7 @@ pub struct DriftArgs {
     pub json: bool,
 
     /// Delimiter character (auto-detected if not specified)
-    #[arg(short, long)]
+    #[arg(short, long, value_parser = parse_delimiter)]
     pub delimiter: Option<char>,
 
     /// Treat first row as data, not header
@@ -89,6 +89,22 @@ pub enum TimeGrain {
     Month,
 }
 
+fn parse_delimiter(value: &str) -> Result<char, String> {
+    let mut chars = value.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) if c.is_ascii() && !matches!(c, '\0' | '\r' | '\n' | '"') => Ok(c),
+        _ => Err("Use one ASCII delimiter other than a quote, NUL, or newline".to_owned()),
+    }
+}
+
+fn parse_sample_size(value: &str) -> Result<usize, String> {
+    value
+        .parse::<usize>()
+        .ok()
+        .filter(|&n| n > 0)
+        .ok_or_else(|| "Sample size must be a positive integer".to_owned())
+}
+
 impl std::str::FromStr for TimeGrain {
     type Err = String;
 
@@ -97,7 +113,10 @@ impl std::str::FromStr for TimeGrain {
             "day" => Ok(TimeGrain::Day),
             "week" => Ok(TimeGrain::Week),
             "month" => Ok(TimeGrain::Month),
-            _ => Err(format!("Invalid time grain: {}. Use day, week, or month.", s)),
+            _ => Err(format!(
+                "Invalid time grain: {}. Use day, week, or month.",
+                s
+            )),
         }
     }
 }
@@ -108,8 +127,6 @@ pub mod exit_codes {
     pub const SUCCESS: i32 = 0;
     /// Runtime error (file not found, parse error, etc.)
     pub const ERROR: i32 = 1;
-    /// Invalid arguments
-    pub const INVALID_ARGS: i32 = 2;
 }
 
 #[cfg(test)]
@@ -133,12 +150,17 @@ mod tests {
     #[test]
     fn test_cli_parse_profile_with_flags() {
         let cli = Cli::parse_from([
-            "csvops", "profile", "data.csv",
+            "csvops",
+            "profile",
+            "data.csv",
             "--json",
-            "--delimiter", ",",
+            "--delimiter",
+            ",",
             "--no-header",
-            "--missing", "NA,N/A,NULL",
-            "--sample-size", "5000",
+            "--missing",
+            "NA,N/A,NULL",
+            "--sample-size",
+            "5000",
             "--no-color",
         ]);
         match cli.command {
@@ -147,7 +169,14 @@ mod tests {
                 assert!(args.json);
                 assert_eq!(args.delimiter, Some(','));
                 assert!(args.no_header);
-                assert_eq!(args.missing, Some(vec!["NA".to_string(), "N/A".to_string(), "NULL".to_string()]));
+                assert_eq!(
+                    args.missing,
+                    Some(vec![
+                        "NA".to_string(),
+                        "N/A".to_string(),
+                        "NULL".to_string()
+                    ])
+                );
                 assert_eq!(args.sample_size, 5000);
                 assert!(args.no_color);
             }
@@ -157,10 +186,7 @@ mod tests {
 
     #[test]
     fn test_cli_parse_drift() {
-        let cli = Cli::parse_from([
-            "csvops", "drift", "test.csv",
-            "--time-col", "created_at",
-        ]);
+        let cli = Cli::parse_from(["csvops", "drift", "test.csv", "--time-col", "created_at"]);
         match cli.command {
             Command::Drift(args) => {
                 assert_eq!(args.file, PathBuf::from("test.csv"));
@@ -174,9 +200,13 @@ mod tests {
     #[test]
     fn test_cli_parse_drift_with_grain() {
         let cli = Cli::parse_from([
-            "csvops", "drift", "test.csv",
-            "--time-col", "timestamp",
-            "--grain", "week",
+            "csvops",
+            "drift",
+            "test.csv",
+            "--time-col",
+            "timestamp",
+            "--grain",
+            "week",
             "--json",
         ]);
         match cli.command {

@@ -111,12 +111,15 @@ impl TopKTracker {
             let min_entry = self
                 .counters
                 .iter()
-                .min_by_key(|(_, (count, _))| count)
+                .min_by(|(a, (a_count, _)), (b, (b_count, _))| {
+                    a_count.cmp(b_count).then_with(|| a.cmp(b))
+                })
                 .map(|(k, (c, _))| (k.clone(), *c));
 
             if let Some((min_key, min_count)) = min_entry {
                 self.counters.remove(&min_key);
-                self.counters.insert(value.to_string(), (min_count + 1, min_count));
+                self.counters
+                    .insert(value.to_string(), (min_count + 1, min_count));
                 self.min_count = min_count;
             }
         }
@@ -130,12 +133,13 @@ impl TopKTracker {
             .map(|(k, (c, _))| (k.clone(), *c))
             .collect();
 
-        items.sort_by(|a, b| b.1.cmp(&a.1));
+        items.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         items.truncate(k);
         items
     }
 
     /// Returns the estimated count for a value
+    #[cfg(test)]
     pub fn count(&self, value: &str) -> usize {
         self.counters.get(value).map(|(c, _)| *c).unwrap_or(0)
     }
@@ -149,6 +153,7 @@ pub struct ColumnStats {
     pub types: TypeStats,
     pub cardinality: CardinalityEstimator,
     pub numeric_stats: StreamingStats,
+    pub non_finite_count: usize,
     pub numeric_sampler: NumericSampler,
     pub top_values: TopKTracker,
     pub min_length: Option<usize>,
@@ -163,6 +168,7 @@ impl ColumnStats {
             types: TypeStats::new(),
             cardinality: CardinalityEstimator::new(),
             numeric_stats: StreamingStats::new(),
+            non_finite_count: 0,
             numeric_sampler: NumericSampler::new(sample_size),
             top_values: TopKTracker::default(),
             min_length: None,
@@ -194,8 +200,12 @@ impl ColumnStats {
 
             // If numeric, update numeric stats
             if let Ok(num) = value.trim().parse::<f64>() {
-                self.numeric_stats.update(num);
-                self.numeric_sampler.add(num);
+                if num.is_finite() {
+                    self.numeric_stats.update(num);
+                    self.numeric_sampler.add(num);
+                } else {
+                    self.non_finite_count += 1;
+                }
             }
         }
     }

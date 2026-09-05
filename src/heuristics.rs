@@ -32,9 +32,7 @@ pub fn is_likely_id_column(stats: &ColumnStats) -> bool {
     // Check 3: UUID pattern in values (check via type and pattern)
     // We can check top values for UUID pattern
     let top_values = stats.top_values.top_k(5);
-    let has_uuid_pattern = top_values
-        .iter()
-        .any(|(v, _)| UUID_PATTERN.is_match(v));
+    let has_uuid_pattern = top_values.iter().any(|(v, _)| UUID_PATTERN.is_match(v));
 
     // Check 4: Sequential integers
     let is_sequential_int = stats.inferred_type() == DataType::Integer && is_highly_unique;
@@ -103,10 +101,8 @@ impl ColumnHeuristics {
         let missing_pct = stats.missing.missing_percentage();
 
         // Count outliers for numeric columns
-        let outlier_count = if matches!(
-            stats.inferred_type(),
-            DataType::Integer | DataType::Float
-        ) {
+        let outlier_count = if matches!(stats.inferred_type(), DataType::Integer | DataType::Float)
+        {
             count_outliers(stats)
         } else {
             0

@@ -23,6 +23,9 @@ pub struct DriftResult {
     pub buckets: Vec<BucketSummary>,
     pub warnings: Vec<Warning>,
     pub column_names: Vec<String>,
+    pub analyzed_rows: usize,
+    pub skipped_timestamp_rows: usize,
+    pub skipped_malformed_rows: usize,
 }
 
 /// Summary of a single time bucket
@@ -42,6 +45,9 @@ pub struct DriftDetector {
     buckets: BTreeMap<String, TimeBucket>,
     column_names: Vec<String>,
     num_columns: usize,
+    non_finite_values: usize,
+    analyzed_rows: usize,
+    skipped_timestamp_rows: usize,
 }
 
 impl DriftDetector {
@@ -59,6 +65,9 @@ impl DriftDetector {
             buckets: BTreeMap::new(),
             column_names,
             num_columns,
+            non_finite_values: 0,
+            analyzed_rows: 0,
+            skipped_timestamp_rows: 0,
         }
     }
 
@@ -68,13 +77,23 @@ impl DriftDetector {
         let time_value = values.get(self.time_col_idx).copied().unwrap_or("");
 
         // Parse timestamp
-        let bucket_key = match parse_datetime(time_value) {
-            Some(dt) => get_bucket_key(dt, self.grain),
-            None => return, // Skip rows with unparseable timestamps
+        let timestamp = if self.missing_detector.is_missing(time_value) {
+            None
+        } else {
+            parse_datetime(time_value)
         };
+        let bucket_key = match timestamp {
+            Some(dt) => get_bucket_key(dt, self.grain),
+            None => {
+                self.skipped_timestamp_rows += 1;
+                return;
+            }
+        };
+        self.analyzed_rows += 1;
 
         // Get or create bucket
-        let bucket = self.buckets
+        let bucket = self
+            .buckets
             .entry(bucket_key.clone())
             .or_insert_with(|| TimeBucket::new(bucket_key, self.num_columns));
 
@@ -93,7 +112,11 @@ impl DriftDetector {
             } else {
                 // Try to parse as numeric
                 if let Ok(num) = value.trim().parse::<f64>() {
-                    bucket.record_numeric(col_idx, num);
+                    if num.is_finite() {
+                        bucket.record_numeric(col_idx, num);
+                    } else {
+                        self.non_finite_values += 1;
+                    }
                 }
             }
         }
@@ -102,12 +125,41 @@ impl DriftDetector {
     /// Analyzes the collected data for drift
     pub fn analyze(&self) -> DriftResult {
         let mut warnings = Vec::new();
+        if self.non_finite_values > 0 {
+            warnings.push(Warning::for_file(
+                Severity::Warning,
+                format!(
+                    "Excluded {} non-finite values from numeric means",
+                    self.non_finite_values
+                ),
+                WarningCode::NonFiniteNumeric,
+            ));
+        }
+        if self.skipped_timestamp_rows > 0 {
+            warnings.push(Warning::for_column(
+                Severity::Warning,
+                &self.column_names[self.time_col_idx],
+                format!(
+                    "Skipped {} rows with missing or invalid timestamps",
+                    self.skipped_timestamp_rows
+                ),
+                WarningCode::InvalidTimestamp,
+            ));
+        }
+        if self.buckets.len() < 2 {
+            warnings.push(Warning::for_file(
+                Severity::Warning,
+                "At least two populated time buckets are needed to compare drift".to_owned(),
+                WarningCode::InsufficientBuckets,
+            ));
+        }
 
         // Convert buckets to summaries
-        let summaries: Vec<BucketSummary> = self.buckets
-            .iter()
-            .map(|(key, bucket)| BucketSummary {
-                key: key.clone(),
+        let summaries: Vec<BucketSummary> = self
+            .buckets
+            .values()
+            .map(|bucket| BucketSummary {
+                key: bucket.key.clone(),
                 row_count: bucket.row_count,
                 missing_rates: (0..self.num_columns)
                     .map(|i| bucket.missing_rate(i))
@@ -139,7 +191,7 @@ impl DriftDetector {
                                 prev.row_count,
                                 curr.row_count
                             ),
-                            WarningCode::HighMissingRate, // Reusing code
+                            WarningCode::RowCountChanged,
                         ));
                     }
                 }
@@ -150,7 +202,9 @@ impl DriftDetector {
                         continue;
                     }
 
-                    let col_name = self.column_names.get(col_idx)
+                    let col_name = self
+                        .column_names
+                        .get(col_idx)
                         .map(|s| s.as_str())
                         .unwrap_or("unknown");
 
@@ -170,7 +224,7 @@ impl DriftDetector {
                                 prev.key,
                                 curr.key
                             ),
-                            WarningCode::HighMissingRate,
+                            WarningCode::MissingRateChanged,
                         ));
                     }
 
@@ -179,7 +233,7 @@ impl DriftDetector {
                         prev.numeric_means.get(col_idx).and_then(|m| *m),
                         curr.numeric_means.get(col_idx).and_then(|m| *m),
                     ) {
-                        if prev_mean.abs() > f64::EPSILON {
+                        if prev_mean != 0.0 {
                             let relative_change = (curr_mean - prev_mean).abs() / prev_mean.abs();
                             if relative_change > thresholds::MEAN_CHANGE_RELATIVE {
                                 warnings.push(Warning::for_column(
@@ -193,9 +247,19 @@ impl DriftDetector {
                                         prev_mean,
                                         curr_mean
                                     ),
-                                    WarningCode::OutliersDetected, // Reusing code
+                                    WarningCode::MeanChanged,
                                 ));
                             }
+                        } else if curr_mean != 0.0 {
+                            warnings.push(Warning::for_column(
+                                Severity::Warning,
+                                col_name,
+                                format!(
+                                    "Mean changed from zero between {} and {} (0.00 -> {:.2})",
+                                    prev.key, curr.key, curr_mean
+                                ),
+                                WarningCode::MeanChanged,
+                            ));
                         }
                     }
                 }
@@ -203,13 +267,18 @@ impl DriftDetector {
         }
 
         DriftResult {
-            time_column: self.column_names.get(self.time_col_idx)
+            time_column: self
+                .column_names
+                .get(self.time_col_idx)
                 .cloned()
                 .unwrap_or_default(),
             grain: self.grain,
             buckets: summaries,
             warnings,
             column_names: self.column_names.clone(),
+            analyzed_rows: self.analyzed_rows,
+            skipped_timestamp_rows: self.skipped_timestamp_rows,
+            skipped_malformed_rows: 0,
         }
     }
 }
@@ -234,6 +303,11 @@ pub fn render_drift(result: &DriftResult, use_color: bool) -> String {
     output.push_str(&format!("  Time Column: {}\n", result.time_column));
     output.push_str(&format!("  Grain:       {:?}\n", result.grain));
     output.push_str(&format!("  Buckets:     {}\n", result.buckets.len()));
+    output.push_str(&format!("  Analyzed:    {} rows\n", result.analyzed_rows));
+    output.push_str(&format!(
+        "  Skipped:     {} invalid timestamps, {} malformed rows\n",
+        result.skipped_timestamp_rows, result.skipped_malformed_rows
+    ));
     output.push('\n');
 
     // Warnings
@@ -255,12 +329,16 @@ pub fn render_drift(result: &DriftResult, use_color: bool) -> String {
                 "WARNING".to_string()
             };
 
-            let col_str = warning.column
+            let col_str = warning
+                .column
                 .as_ref()
                 .map(|c| format!("[{}] ", c))
                 .unwrap_or_default();
 
-            output.push_str(&format!("  {} {}{}\n", severity_str, col_str, warning.message));
+            output.push_str(&format!(
+                "  {} {}{}\n",
+                severity_str, col_str, warning.message
+            ));
         }
         output.push('\n');
     }
@@ -278,7 +356,10 @@ pub fn render_drift(result: &DriftResult, use_color: bool) -> String {
 
     // Table header
     output.push_str(&format!("  {:15} {:>10}\n", "Bucket", "Rows"));
-    output.push_str(&format!("  {:15} {:>10}\n", "───────────────", "──────────"));
+    output.push_str(&format!(
+        "  {:15} {:>10}\n",
+        "───────────────", "──────────"
+    ));
 
     for bucket in &result.buckets {
         output.push_str(&format!("  {:15} {:>10}\n", bucket.key, bucket.row_count));
@@ -296,6 +377,9 @@ pub fn drift_to_json(result: &DriftResult) -> Result<String, serde_json::Error> 
         time_column: String,
         grain: String,
         bucket_count: usize,
+        analyzed_rows: usize,
+        skipped_timestamp_rows: usize,
+        skipped_malformed_rows: usize,
         warnings: Vec<JsonDriftWarning>,
         buckets: Vec<JsonBucket>,
     }
@@ -303,6 +387,7 @@ pub fn drift_to_json(result: &DriftResult) -> Result<String, serde_json::Error> 
     #[derive(Serialize)]
     struct JsonDriftWarning {
         severity: String,
+        code: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         column: Option<String>,
         message: String,
@@ -312,41 +397,53 @@ pub fn drift_to_json(result: &DriftResult) -> Result<String, serde_json::Error> 
     struct JsonBucket {
         key: String,
         row_count: usize,
-        missing_rates: std::collections::HashMap<String, f64>,
-        numeric_means: std::collections::HashMap<String, f64>,
+        missing_rates: BTreeMap<String, f64>,
+        numeric_means: BTreeMap<String, f64>,
     }
 
     let json_result = JsonDriftResult {
         time_column: result.time_column.clone(),
         grain: format!("{:?}", result.grain).to_lowercase(),
         bucket_count: result.buckets.len(),
-        warnings: result.warnings.iter().map(|w| JsonDriftWarning {
-            severity: format!("{}", w.severity),
-            column: w.column.clone(),
-            message: w.message.clone(),
-        }).collect(),
-        buckets: result.buckets.iter().map(|b| {
-            let mut missing_rates = std::collections::HashMap::new();
-            let mut numeric_means = std::collections::HashMap::new();
+        analyzed_rows: result.analyzed_rows,
+        skipped_timestamp_rows: result.skipped_timestamp_rows,
+        skipped_malformed_rows: result.skipped_malformed_rows,
+        warnings: result
+            .warnings
+            .iter()
+            .map(|w| JsonDriftWarning {
+                severity: format!("{}", w.severity),
+                code: w.code.to_string(),
+                column: w.column.clone(),
+                message: w.message.clone(),
+            })
+            .collect(),
+        buckets: result
+            .buckets
+            .iter()
+            .map(|b| {
+                let mut missing_rates = BTreeMap::new();
+                let mut numeric_means = BTreeMap::new();
 
-            for (i, name) in result.column_names.iter().enumerate() {
-                if let Some(&rate) = b.missing_rates.get(i) {
-                    if rate > 0.0 {
-                        missing_rates.insert(name.clone(), rate);
+                for (i, name) in result.column_names.iter().enumerate() {
+                    if let Some(&rate) = b.missing_rates.get(i) {
+                        if rate > 0.0 {
+                            missing_rates.insert(name.clone(), rate);
+                        }
+                    }
+                    if let Some(Some(mean)) = b.numeric_means.get(i) {
+                        numeric_means.insert(name.clone(), *mean);
                     }
                 }
-                if let Some(Some(mean)) = b.numeric_means.get(i) {
-                    numeric_means.insert(name.clone(), *mean);
-                }
-            }
 
-            JsonBucket {
-                key: b.key.clone(),
-                row_count: b.row_count,
-                missing_rates,
-                numeric_means,
-            }
-        }).collect(),
+                JsonBucket {
+                    key: b.key.clone(),
+                    row_count: b.row_count,
+                    missing_rates,
+                    numeric_means,
+                }
+            })
+            .collect(),
     };
 
     serde_json::to_string_pretty(&json_result)
@@ -428,7 +525,10 @@ mod tests {
         }
 
         let result = detector.analyze();
-        assert!(result.warnings.iter().any(|w| w.message.contains("Row count")));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.message.contains("Row count")));
     }
 
     #[test]
@@ -449,7 +549,10 @@ mod tests {
         }
 
         let result = detector.analyze();
-        assert!(result.warnings.iter().any(|w| w.message.contains("Missing rate")));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.message.contains("Missing rate")));
     }
 
     #[test]
@@ -467,7 +570,10 @@ mod tests {
         }
 
         let result = detector.analyze();
-        assert!(result.warnings.iter().any(|w| w.message.contains("Mean changed")));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.message.contains("Mean changed")));
     }
 
     #[test]

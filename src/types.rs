@@ -24,17 +24,14 @@ impl std::fmt::Display for DataType {
 }
 
 // Regex patterns for type detection
-static INTEGER_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^-?\d+$").unwrap()
-});
+static INTEGER_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^-?\d+$").unwrap());
 
 static FLOAT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^-?\d+\.\d+$|^-?\d+\.?[eE][+-]?\d+$|^-?\d+\.\d+[eE][+-]?\d+$").unwrap()
 });
 
-static BOOLEAN_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)^(true|false|yes|no|t|f|y|n|1|0)$").unwrap()
-});
+static BOOLEAN_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^(true|false|yes|no|t|f|y|n|1|0)$").unwrap());
 
 // ISO 8601: 2024-01-15, 2024-01-15T10:30:00, 2024-01-15T10:30:00Z, 2024-01-15T10:30:00+05:00
 static ISO_DATETIME_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
@@ -42,14 +39,12 @@ static ISO_DATETIME_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 // US format: 01/15/2024, 1/15/2024, 01-15-2024
-static US_DATE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$").unwrap()
-});
+static US_DATE_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$").unwrap());
 
 // European format: 15/01/2024, 15-01-2024
-static EU_DATE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$").unwrap()
-});
+static EU_DATE_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$").unwrap());
 
 // Unix epoch (seconds or milliseconds)
 static UNIX_EPOCH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
@@ -134,8 +129,11 @@ impl TypeStats {
     /// If more than 5% of non-missing values don't match the dominant type,
     /// it's considered a string column.
     pub fn inferred_type(&self) -> DataType {
-        let non_missing = self.integer_count + self.float_count +
-            self.boolean_count + self.datetime_count + self.string_count;
+        let non_missing = self.integer_count
+            + self.float_count
+            + self.boolean_count
+            + self.datetime_count
+            + self.string_count;
 
         if non_missing == 0 {
             return DataType::String;
@@ -150,10 +148,7 @@ impl TypeStats {
             (DataType::String, self.string_count),
         ];
 
-        let (dominant_type, dominant_count) = counts
-            .iter()
-            .max_by_key(|(_, count)| count)
-            .unwrap();
+        let (dominant_type, dominant_count) = counts.iter().max_by_key(|(_, count)| count).unwrap();
 
         // Check if mixed: more than 5% of non-missing values are different type
         let other_count = non_missing - dominant_count;
@@ -184,8 +179,11 @@ impl TypeStats {
 
     /// Returns true if the column has mixed types (>5% threshold)
     pub fn is_mixed_type(&self) -> bool {
-        let non_missing = self.integer_count + self.float_count +
-            self.boolean_count + self.datetime_count + self.string_count;
+        let non_missing = self.integer_count
+            + self.float_count
+            + self.boolean_count
+            + self.datetime_count
+            + self.string_count;
 
         if non_missing == 0 {
             return false;
@@ -214,8 +212,11 @@ impl TypeStats {
 
     /// Returns the type distribution as percentages
     pub fn type_distribution(&self) -> Vec<(DataType, f64)> {
-        let non_missing = self.integer_count + self.float_count +
-            self.boolean_count + self.datetime_count + self.string_count;
+        let non_missing = self.integer_count
+            + self.float_count
+            + self.boolean_count
+            + self.datetime_count
+            + self.string_count;
 
         if non_missing == 0 {
             return vec![];
@@ -226,7 +227,10 @@ impl TypeStats {
             (DataType::Integer, self.integer_count as f64 / total * 100.0),
             (DataType::Float, self.float_count as f64 / total * 100.0),
             (DataType::Boolean, self.boolean_count as f64 / total * 100.0),
-            (DataType::Datetime, self.datetime_count as f64 / total * 100.0),
+            (
+                DataType::Datetime,
+                self.datetime_count as f64 / total * 100.0,
+            ),
             (DataType::String, self.string_count as f64 / total * 100.0),
         ]
         .into_iter()
@@ -435,9 +439,9 @@ mod tests {
     fn test_type_stats_with_missing() {
         let mut stats = TypeStats::new();
         stats.record("10", false);
-        stats.record("NA", true);  // missing, should not affect inference
+        stats.record("NA", true); // missing, should not affect inference
         stats.record("20", false);
-        stats.record("NULL", true);  // missing
+        stats.record("NULL", true); // missing
         stats.record("30", false);
 
         assert_eq!(stats.inferred_type(), DataType::Integer);

@@ -2,18 +2,18 @@ use std::collections::HashSet;
 
 /// Default tokens that represent missing values
 pub const DEFAULT_MISSING_TOKENS: &[&str] = &[
-    "",      // empty string
-    "NA",    // R-style
-    "N/A",   // common
-    "NULL",  // SQL-style
-    "None",  // Python-style
-    "-",     // dash placeholder
-    "NaN",   // Not a Number
-    "nan",   // lowercase nan
-    "null",  // lowercase null
-    "none",  // lowercase none
-    "na",    // lowercase na
-    "n/a",   // lowercase n/a
+    "",     // empty string
+    "NA",   // R-style
+    "N/A",  // common
+    "NULL", // SQL-style
+    "None", // Python-style
+    "-",    // dash placeholder
+    "NaN",  // Not a Number
+    "nan",  // lowercase nan
+    "null", // lowercase null
+    "none", // lowercase none
+    "na",   // lowercase na
+    "n/a",  // lowercase n/a
 ];
 
 /// Detector for missing values in CSV data
@@ -57,12 +57,6 @@ impl MissingDetector {
         }
     }
 
-    /// Sets whether matching should be case-insensitive
-    pub fn case_insensitive(mut self, value: bool) -> Self {
-        self.case_insensitive = value;
-        self
-    }
-
     /// Checks if a value is considered missing
     pub fn is_missing(&self, value: &str) -> bool {
         let trimmed = value.trim();
@@ -70,16 +64,10 @@ impl MissingDetector {
         if self.case_insensitive {
             let lower = trimmed.to_lowercase();
             // Check both the original and lowercase versions
-            self.tokens.contains(trimmed) ||
-                self.tokens.iter().any(|t| t.to_lowercase() == lower)
+            self.tokens.contains(trimmed) || self.tokens.iter().any(|t| t.to_lowercase() == lower)
         } else {
             self.tokens.contains(trimmed)
         }
-    }
-
-    /// Returns the set of tokens being used
-    pub fn tokens(&self) -> &HashSet<String> {
-        &self.tokens
     }
 }
 
@@ -116,6 +104,7 @@ impl MissingStats {
     }
 
     /// Returns true if any missing values were found
+    #[cfg(test)]
     pub fn has_missing(&self) -> bool {
         self.missing_count > 0
     }
@@ -123,11 +112,13 @@ impl MissingStats {
 
 /// Tracks missing value statistics for multiple columns
 #[derive(Debug, Clone)]
+#[cfg(test)]
 pub struct ColumnMissingStats {
     detector: MissingDetector,
     stats: Vec<MissingStats>,
 }
 
+#[cfg(test)]
 impl ColumnMissingStats {
     /// Creates a new tracker for the specified number of columns
     pub fn new(num_columns: usize, detector: MissingDetector) -> Self {
@@ -147,22 +138,9 @@ impl ColumnMissingStats {
         }
     }
 
-    /// Records a single value for a specific column
-    pub fn record_value(&mut self, column: usize, value: &str) {
-        if column < self.stats.len() {
-            let is_missing = self.detector.is_missing(value);
-            self.stats[column].record(is_missing);
-        }
-    }
-
     /// Returns statistics for a specific column
     pub fn column_stats(&self, column: usize) -> Option<&MissingStats> {
         self.stats.get(column)
-    }
-
-    /// Returns statistics for all columns
-    pub fn all_stats(&self) -> &[MissingStats] {
-        &self.stats
     }
 }
 
@@ -230,7 +208,7 @@ mod tests {
         // Whitespace should be trimmed
         assert!(detector.is_missing("  NA  "));
         assert!(detector.is_missing("\tNULL\t"));
-        assert!(detector.is_missing(" "));  // Just whitespace = empty = missing
+        assert!(detector.is_missing(" ")); // Just whitespace = empty = missing
         assert!(detector.is_missing("  "));
     }
 

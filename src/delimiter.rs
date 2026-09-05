@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 
 /// Supported delimiters for CSV files
@@ -33,20 +32,19 @@ pub fn detect_delimiter<R: Read + Seek>(reader: &mut R) -> Result<char, Delimite
     }
 
     // Score each delimiter
-    let mut scores: HashMap<char, f64> = HashMap::new();
+    let mut best = None;
 
     for &delim in &DELIMITERS {
         if let Some(score) = score_delimiter(&lines, delim) {
-            scores.insert(delim, score);
+            if best.is_none_or(|(_, best_score)| score > best_score) {
+                best = Some((delim, score));
+            }
         }
     }
 
     // Find best delimiter
-    scores
-        .into_iter()
-        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(delim, _)| delim)
-        .ok_or(DelimiterError::NoDelimiterFound)
+    // A nonempty file with no separator may be a valid single-column CSV.
+    Ok(best.map_or(',', |(delimiter, _)| delimiter))
 }
 
 /// Scores a delimiter based on consistency and frequency
@@ -56,10 +54,7 @@ fn score_delimiter(lines: &[&str], delim: char) -> Option<f64> {
     }
 
     // Count fields per line
-    let field_counts: Vec<usize> = lines
-        .iter()
-        .map(|line| count_fields(line, delim))
-        .collect();
+    let field_counts: Vec<usize> = lines.iter().map(|line| count_fields(line, delim)).collect();
 
     // If no line has more than 1 field, this delimiter is not useful
     if field_counts.iter().all(|&c| c <= 1) {
@@ -107,8 +102,6 @@ fn count_fields(line: &str, delim: char) -> usize {
 pub enum DelimiterError {
     #[error("File is empty")]
     EmptyFile,
-    #[error("Could not detect delimiter")]
-    NoDelimiterFound,
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }

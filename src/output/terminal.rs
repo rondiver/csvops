@@ -4,21 +4,6 @@ use crate::output::ProfileResult;
 use crate::types::DataType;
 use crate::warnings::Severity;
 
-/// Box drawing characters for terminal output
-mod box_chars {
-    pub const TOP_LEFT: &str = "┌";
-    pub const TOP_RIGHT: &str = "┐";
-    pub const BOTTOM_LEFT: &str = "└";
-    pub const BOTTOM_RIGHT: &str = "┘";
-    pub const HORIZONTAL: &str = "─";
-    pub const VERTICAL: &str = "│";
-    pub const T_DOWN: &str = "┬";
-    pub const T_UP: &str = "┴";
-    pub const T_RIGHT: &str = "├";
-    pub const T_LEFT: &str = "┤";
-    pub const CROSS: &str = "┼";
-}
-
 /// Renders the profile result to the terminal
 pub fn render(result: &ProfileResult, use_color: bool) -> String {
     let mut output = String::new();
@@ -53,11 +38,29 @@ fn render_file_stats(result: &ProfileResult, use_color: bool) -> String {
     output.push_str(&format!("{}\n", "─".repeat(50)));
 
     output.push_str(&format!("  File:       {}\n", result.file_path));
-    output.push_str(&format!("  Size:       {}\n", format_bytes(result.file_size_bytes)));
-    output.push_str(&format!("  Rows:       {}\n", format_number(result.row_count)));
+    output.push_str(&format!(
+        "  Size:       {}\n",
+        format_bytes(result.file_size_bytes)
+    ));
+    output.push_str(&format!(
+        "  Rows:       {}\n",
+        format_number(result.row_count)
+    ));
+    if result.skipped_rows > 0 {
+        output.push_str(&format!(
+            "  Skipped:    {} malformed rows\n",
+            result.skipped_rows
+        ));
+    }
     output.push_str(&format!("  Columns:    {}\n", result.column_count));
-    output.push_str(&format!("  Delimiter:  '{}'\n", format_delimiter(result.delimiter)));
-    output.push_str(&format!("  Header:     {}\n", if result.has_header { "yes" } else { "no" }));
+    output.push_str(&format!(
+        "  Delimiter:  '{}'\n",
+        format_delimiter(result.delimiter)
+    ));
+    output.push_str(&format!(
+        "  Header:     {}\n",
+        if result.has_header { "yes" } else { "no" }
+    ));
 
     output
 }
@@ -100,12 +103,16 @@ fn render_warnings(result: &ProfileResult, use_color: bool) -> String {
             }
         };
 
-        let col_str = warning.column
+        let col_str = warning
+            .column
             .as_ref()
             .map(|c| format!("[{}] ", c))
             .unwrap_or_default();
 
-        output.push_str(&format!("  {} {}{}\n", severity_str, col_str, warning.message));
+        output.push_str(&format!(
+            "  {} {}{}\n",
+            severity_str, col_str, warning.message
+        ));
     }
 
     output
@@ -169,7 +176,11 @@ fn render_column(col: &crate::output::ColumnProfile, use_color: bool) -> String 
 
     // Cardinality
     let cardinality = stats.cardinality();
-    let cardinality_suffix = if stats.cardinality.is_exact() { "" } else { " (estimated)" };
+    let cardinality_suffix = if stats.cardinality.is_exact() {
+        ""
+    } else {
+        " (estimated)"
+    };
     output.push_str(&format!(
         "    Cardinality:  {}{}\n",
         format_number(cardinality),
@@ -198,8 +209,8 @@ fn render_column(col: &crate::output::ColumnProfile, use_color: bool) -> String 
         if !top.is_empty() {
             output.push_str("    Top values:\n");
             for (value, count) in top {
-                let display_value = if value.len() > 30 {
-                    format!("{}...", &value[..30])
+                let display_value = if value.chars().count() > 30 {
+                    format!("{}...", value.chars().take(30).collect::<String>())
                 } else {
                     value
                 };
@@ -233,7 +244,7 @@ fn format_number(n: usize) -> String {
     let chars: Vec<char> = s.chars().collect();
 
     for (i, c) in chars.iter().enumerate() {
-        if i > 0 && (chars.len() - i) % 3 == 0 {
+        if i > 0 && (chars.len() - i).is_multiple_of(3) {
             result.push(',');
         }
         result.push(*c);
@@ -288,10 +299,15 @@ mod tests {
             file_path: "test.csv".to_string(),
             file_size_bytes: 1024,
             row_count: 100,
+            skipped_rows: 0,
             column_count: 1,
             delimiter: ',',
             has_header: true,
-            columns: vec![ColumnProfile::new("test_col".to_string(), stats, heuristics)],
+            columns: vec![ColumnProfile::new(
+                "test_col".to_string(),
+                stats,
+                heuristics,
+            )],
             warnings: vec![],
         }
     }
@@ -334,14 +350,12 @@ mod tests {
     #[test]
     fn test_render_with_warnings() {
         let mut result = create_test_result();
-        result.warnings = vec![
-            Warning::for_column(
-                Severity::Warning,
-                "col1",
-                "Test warning".to_string(),
-                WarningCode::MixedTypes,
-            ),
-        ];
+        result.warnings = vec![Warning::for_column(
+            Severity::Warning,
+            "col1",
+            "Test warning".to_string(),
+            WarningCode::MixedTypes,
+        )];
 
         let output = render(&result, false);
         assert!(output.contains("Warnings"));
@@ -374,7 +388,7 @@ mod tests {
     #[test]
     fn test_format_numeric() {
         assert_eq!(format_numeric(42.0), "42");
-        assert_eq!(format_numeric(3.1415), "3.1415");
+        assert_eq!(format_numeric(2.3456), "2.3456");
         assert!(format_numeric(1_000_000.0).contains("e"));
     }
 }

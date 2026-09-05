@@ -1,0 +1,13 @@
+job_id,created_at,service,quantity,quoted_total,status
+J001,2026-08-24,saddle stitch,1000,100,approved
+J002,2026-08-25,perfect bind,1200,120,approved
+J003,2026-08-26,saddle stitch,800,80,approved
+J004,2026-08-27,perfect bind,1000,100,approved
+J005,2026-08-31,saddle stitch,1000,200,approved
+J006,2026-08-31,perfect bind,1000,220,approved
+J007,2026-09-01,saddle stitch,,180,needs review
+J008,2026-09-01,perfect bind,,200,needs review
+J009,2026-09-02,saddle stitch,NA,200,needs review
+J010,2026-09-02,perfect bind,,220,needs review
+J011,2026-09-03,saddle stitch,NULL,180,needs review
+J012,2026-09-03,perfect bind,,200,needs review

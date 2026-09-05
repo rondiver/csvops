@@ -3,7 +3,6 @@ use serde_json;
 
 use crate::output::ProfileResult;
 use crate::types::DataType;
-use crate::warnings::Severity;
 
 /// JSON output structure for profile results
 #[derive(Debug, Serialize)]
@@ -18,6 +17,7 @@ pub struct FileInfo {
     pub path: String,
     pub size_bytes: u64,
     pub row_count: usize,
+    pub skipped_rows: usize,
     pub column_count: usize,
     pub delimiter: String,
     pub has_header: bool,
@@ -41,6 +41,7 @@ pub struct JsonColumn {
     pub missing_percentage: f64,
     pub cardinality: usize,
     pub cardinality_exact: bool,
+    pub non_finite_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub numeric_stats: Option<JsonNumericStats>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -51,6 +52,8 @@ pub struct JsonColumn {
 
 #[derive(Debug, Serialize)]
 pub struct JsonNumericStats {
+    pub count: usize,
+    pub sample_size: usize,
     pub mean: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub std_dev: Option<f64>,
@@ -95,6 +98,7 @@ pub fn to_json(result: &ProfileResult) -> Result<String, serde_json::Error> {
 }
 
 /// Converts a ProfileResult to compact JSON
+#[cfg(test)]
 pub fn to_json_compact(result: &ProfileResult) -> Result<String, serde_json::Error> {
     let json_profile = convert_to_json_profile(result);
     serde_json::to_string(&json_profile)
@@ -105,6 +109,7 @@ fn convert_to_json_profile(result: &ProfileResult) -> JsonProfile {
         path: result.file_path.clone(),
         size_bytes: result.file_size_bytes,
         row_count: result.row_count,
+        skipped_rows: result.skipped_rows,
         column_count: result.column_count,
         delimiter: format_delimiter(result.delimiter),
         has_header: result.has_header,
@@ -125,10 +130,7 @@ fn convert_to_json_profile(result: &ProfileResult) -> JsonProfile {
     let mut columns: Vec<_> = result.columns.iter().collect();
     columns.sort_by(|a, b| a.name.cmp(&b.name));
 
-    let columns: Vec<JsonColumn> = columns
-        .iter()
-        .map(|col| convert_column(col))
-        .collect();
+    let columns: Vec<JsonColumn> = columns.iter().map(|col| convert_column(col)).collect();
 
     JsonProfile {
         file,
@@ -145,6 +147,8 @@ fn convert_column(col: &crate::output::ColumnProfile) -> JsonColumn {
         stats.numeric_stats.mean().map(|mean| {
             let mut sampler = col.stats.numeric_sampler.clone();
             JsonNumericStats {
+                count: stats.numeric_stats.count(),
+                sample_size: sampler.sample_count(),
                 mean,
                 std_dev: stats.numeric_stats.std_dev(),
                 min: stats.numeric_stats.min().unwrap_or(0.0),
@@ -181,7 +185,8 @@ fn convert_column(col: &crate::output::ColumnProfile) -> JsonColumn {
         missing_count: stats.missing.missing_count,
         missing_percentage: stats.missing.missing_percentage(),
         cardinality: stats.cardinality(),
-        cardinality_exact: stats.cardinality.is_exact(),
+        cardinality_exact: stats.cardinality_is_exact(),
+        non_finite_count: stats.non_finite_count,
         numeric_stats,
         string_stats,
         top_values,
@@ -210,7 +215,7 @@ mod tests {
     use crate::missing::MissingDetector;
     use crate::output::ColumnProfile;
     use crate::stats::ColumnStats;
-    use crate::warnings::{Warning, WarningCode};
+    use crate::warnings::{Severity, Warning, WarningCode};
 
     fn create_test_result() -> ProfileResult {
         let detector = MissingDetector::default();
@@ -226,10 +231,15 @@ mod tests {
             file_path: "test.csv".to_string(),
             file_size_bytes: 1024,
             row_count: 100,
+            skipped_rows: 0,
             column_count: 1,
             delimiter: ',',
             has_header: true,
-            columns: vec![ColumnProfile::new("test_col".to_string(), stats, heuristics)],
+            columns: vec![ColumnProfile::new(
+                "test_col".to_string(),
+                stats,
+                heuristics,
+            )],
             warnings: vec![],
         }
     }
@@ -260,14 +270,12 @@ mod tests {
     #[test]
     fn test_json_with_warnings() {
         let mut result = create_test_result();
-        result.warnings = vec![
-            Warning::for_column(
-                Severity::Warning,
-                "col1",
-                "Test warning".to_string(),
-                WarningCode::MixedTypes,
-            ),
-        ];
+        result.warnings = vec![Warning::for_column(
+            Severity::Warning,
+            "col1",
+            "Test warning".to_string(),
+            WarningCode::MixedTypes,
+        )];
 
         let json = to_json(&result).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -295,6 +303,7 @@ mod tests {
             delimiter: ',',
             has_header: true,
             columns: vec![ColumnProfile::new("numbers".to_string(), stats, heuristics)],
+            skipped_rows: 0,
             warnings: vec![],
         };
 

@@ -40,6 +40,13 @@ pub enum WarningCode {
     PotentialIdColumn,
     EmptyColumn,
     AllMissing,
+    MalformedRows,
+    InvalidTimestamp,
+    InsufficientBuckets,
+    RowCountChanged,
+    MissingRateChanged,
+    MeanChanged,
+    NonFiniteNumeric,
 }
 
 impl std::fmt::Display for WarningCode {
@@ -54,12 +61,24 @@ impl std::fmt::Display for WarningCode {
             WarningCode::PotentialIdColumn => write!(f, "POTENTIAL_ID_COLUMN"),
             WarningCode::EmptyColumn => write!(f, "EMPTY_COLUMN"),
             WarningCode::AllMissing => write!(f, "ALL_MISSING"),
+            WarningCode::MalformedRows => write!(f, "MALFORMED_ROWS"),
+            WarningCode::InvalidTimestamp => write!(f, "INVALID_TIMESTAMP"),
+            WarningCode::InsufficientBuckets => write!(f, "INSUFFICIENT_BUCKETS"),
+            WarningCode::RowCountChanged => write!(f, "ROW_COUNT_CHANGED"),
+            WarningCode::MissingRateChanged => write!(f, "MISSING_RATE_CHANGED"),
+            WarningCode::MeanChanged => write!(f, "MEAN_CHANGED"),
+            WarningCode::NonFiniteNumeric => write!(f, "NON_FINITE_NUMERIC"),
         }
     }
 }
 
 impl Warning {
-    pub fn new(severity: Severity, column: Option<String>, message: String, code: WarningCode) -> Self {
+    pub fn new(
+        severity: Severity,
+        column: Option<String>,
+        message: String,
+        code: WarningCode,
+    ) -> Self {
         Self {
             severity,
             column,
@@ -69,7 +88,12 @@ impl Warning {
     }
 
     /// Creates a column-specific warning
-    pub fn for_column(severity: Severity, column: &str, message: String, code: WarningCode) -> Self {
+    pub fn for_column(
+        severity: Severity,
+        column: &str,
+        message: String,
+        code: WarningCode,
+    ) -> Self {
         Self::new(severity, Some(column.to_string()), message, code)
     }
 
@@ -99,6 +123,18 @@ pub fn generate_column_warnings(
     }
 
     // Check for mostly missing (>50%)
+    if stats.non_finite_count > 0 {
+        warnings.push(Warning::for_column(
+            Severity::Warning,
+            col_name,
+            format!(
+                "Excluded {} non-finite values from numeric statistics",
+                stats.non_finite_count
+            ),
+            WarningCode::NonFiniteNumeric,
+        ));
+    }
+
     if heuristics.is_mostly_missing {
         let pct = stats.missing.missing_percentage();
         warnings.push(Warning::for_column(
@@ -129,8 +165,8 @@ pub fn generate_column_warnings(
     if heuristics.is_constant {
         let top = stats.top_values.top_k(1);
         let value = top.first().map(|(v, _)| v.as_str()).unwrap_or("(unknown)");
-        let display_value = if value.len() > 20 {
-            format!("{}...", &value[..20])
+        let display_value = if value.chars().count() > 20 {
+            format!("{}...", value.chars().take(20).collect::<String>())
         } else {
             value.to_string()
         };
@@ -201,7 +237,7 @@ pub fn generate_column_warnings(
 /// Generates file-level warnings
 pub fn generate_file_warnings(
     row_count: usize,
-    column_count: usize,
+    _column_count: usize,
     total_missing: usize,
     total_cells: usize,
 ) -> Vec<Warning> {
@@ -278,7 +314,9 @@ mod tests {
         let heuristics = ColumnHeuristics::analyze(&mut stats);
         let warnings = generate_column_warnings(&stats, &heuristics);
 
-        assert!(warnings.iter().any(|w| w.code == WarningCode::HighMissingRate));
+        assert!(warnings
+            .iter()
+            .any(|w| w.code == WarningCode::HighMissingRate));
     }
 
     #[test]
@@ -300,7 +338,9 @@ mod tests {
         let heuristics = ColumnHeuristics::analyze(&mut stats);
         let warnings = generate_column_warnings(&stats, &heuristics);
 
-        assert!(warnings.iter().any(|w| w.code == WarningCode::ConstantColumn));
+        assert!(warnings
+            .iter()
+            .any(|w| w.code == WarningCode::ConstantColumn));
     }
 
     #[test]
@@ -312,7 +352,9 @@ mod tests {
         let heuristics = ColumnHeuristics::analyze(&mut stats);
         let warnings = generate_column_warnings(&stats, &heuristics);
 
-        assert!(warnings.iter().any(|w| w.code == WarningCode::PotentialIdColumn));
+        assert!(warnings
+            .iter()
+            .any(|w| w.code == WarningCode::PotentialIdColumn));
     }
 
     #[test]
@@ -324,7 +366,9 @@ mod tests {
         let heuristics = ColumnHeuristics::analyze(&mut stats);
         let warnings = generate_column_warnings(&stats, &heuristics);
 
-        assert!(warnings.iter().any(|w| w.code == WarningCode::LowCardinality));
+        assert!(warnings
+            .iter()
+            .any(|w| w.code == WarningCode::LowCardinality));
     }
 
     #[test]
@@ -338,7 +382,9 @@ mod tests {
         let heuristics = ColumnHeuristics::analyze(&mut stats);
         let warnings = generate_column_warnings(&stats, &heuristics);
 
-        assert!(warnings.iter().any(|w| w.code == WarningCode::OutliersDetected));
+        assert!(warnings
+            .iter()
+            .any(|w| w.code == WarningCode::OutliersDetected));
     }
 
     #[test]
@@ -350,15 +396,29 @@ mod tests {
     #[test]
     fn test_file_warnings_high_missing() {
         let warnings = generate_file_warnings(100, 5, 150, 500);
-        assert!(warnings.iter().any(|w| w.code == WarningCode::HighMissingRate));
+        assert!(warnings
+            .iter()
+            .any(|w| w.code == WarningCode::HighMissingRate));
     }
 
     #[test]
     fn test_sort_warnings() {
         let mut warnings = vec![
-            Warning::for_file(Severity::Info, "info".to_string(), WarningCode::LowCardinality),
-            Warning::for_file(Severity::Critical, "critical".to_string(), WarningCode::AllMissing),
-            Warning::for_file(Severity::Warning, "warning".to_string(), WarningCode::MixedTypes),
+            Warning::for_file(
+                Severity::Info,
+                "info".to_string(),
+                WarningCode::LowCardinality,
+            ),
+            Warning::for_file(
+                Severity::Critical,
+                "critical".to_string(),
+                WarningCode::AllMissing,
+            ),
+            Warning::for_file(
+                Severity::Warning,
+                "warning".to_string(),
+                WarningCode::MixedTypes,
+            ),
         ];
 
         sort_warnings(&mut warnings);
@@ -370,7 +430,10 @@ mod tests {
 
     #[test]
     fn test_warning_code_display() {
-        assert_eq!(format!("{}", WarningCode::HighMissingRate), "HIGH_MISSING_RATE");
+        assert_eq!(
+            format!("{}", WarningCode::HighMissingRate),
+            "HIGH_MISSING_RATE"
+        );
         assert_eq!(format!("{}", WarningCode::MixedTypes), "MIXED_TYPES");
     }
 }

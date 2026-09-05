@@ -1,6 +1,7 @@
 use crate::delimiter::{detect_delimiter, DelimiterError};
+use std::collections::HashSet;
 use std::fs::File;
-use std::io::{BufReader, Read, Seek};
+use std::io::{BufReader, Read};
 use std::path::Path;
 
 /// Configuration for reading CSV files
@@ -27,7 +28,9 @@ pub struct CsvReader<R> {
     headers: Vec<String>,
     delimiter: char,
     row_count: usize,
+    skipped_rows: usize,
     malformed_rows: Vec<MalformedRow>,
+    finished: bool,
 }
 
 /// Information about a malformed row
@@ -43,10 +46,6 @@ impl CsvReader<BufReader<File>> {
         let file = File::open(path.as_ref())?;
         let mut buf_reader = BufReader::new(file);
 
-        // Validate UTF-8 by reading a sample
-        validate_utf8(&mut buf_reader)?;
-        buf_reader.seek(std::io::SeekFrom::Start(0))?;
-
         // Detect delimiter if not specified
         let delimiter = match config.delimiter {
             Some(d) => d,
@@ -60,19 +59,37 @@ impl CsvReader<BufReader<File>> {
 impl<R: Read> CsvReader<R> {
     /// Creates a CSV reader from any Read implementation
     pub fn from_reader(reader: R, delimiter: char, has_header: bool) -> Result<Self, ReaderError> {
+        if !delimiter.is_ascii() || matches!(delimiter, '\0' | '\r' | '\n' | '"') {
+            return Err(ReaderError::InvalidDelimiter(delimiter));
+        }
         let mut csv_reader = csv::ReaderBuilder::new()
             .delimiter(delimiter as u8)
             .has_headers(has_header)
-            .flexible(true) // Allow varying number of fields
+            .flexible(false)
             .from_reader(reader);
 
+        // csv keeps this first record as data when has_headers is false.
+        // Validate UTF-8 as records are read, including the header; a byte
+        // sample can split a valid multi-byte character at its boundary.
+        let first_record = csv_reader.headers()?;
+        if first_record.is_empty() {
+            return Err(DelimiterError::EmptyFile.into());
+        }
         let headers = if has_header {
-            csv_reader
-                .headers()
-                .map(|h| h.iter().map(|s| s.to_string()).collect())
-                .unwrap_or_default()
+            let mut seen = HashSet::new();
+            for name in first_record {
+                if name.trim().is_empty() {
+                    return Err(ReaderError::EmptyHeader);
+                }
+                if !seen.insert(name) {
+                    return Err(ReaderError::DuplicateHeader(name.to_owned()));
+                }
+            }
+            first_record.iter().map(str::to_owned).collect()
         } else {
-            Vec::new()
+            (0..first_record.len())
+                .map(|i| format!("column_{}", i))
+                .collect()
         };
 
         Ok(Self {
@@ -80,7 +97,9 @@ impl<R: Read> CsvReader<R> {
             headers,
             delimiter,
             row_count: 0,
+            skipped_rows: 0,
             malformed_rows: Vec::new(),
+            finished: false,
         })
     }
 
@@ -89,7 +108,7 @@ impl<R: Read> CsvReader<R> {
         self.delimiter
     }
 
-    /// Returns the headers (empty if no header row)
+    /// Returns header names, generated as column_0, column_1, ... without a header.
     pub fn headers(&self) -> &[String] {
         &self.headers
     }
@@ -97,6 +116,10 @@ impl<R: Read> CsvReader<R> {
     /// Returns the number of rows read so far
     pub fn row_count(&self) -> usize {
         self.row_count
+    }
+
+    pub fn skipped_rows(&self) -> usize {
+        self.skipped_rows
     }
 
     /// Returns information about malformed rows encountered
@@ -119,6 +142,9 @@ impl<'a, R: Read> Iterator for RecordIterator<'a, R> {
     type Item = Result<csv::StringRecord, ReaderError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.finished {
+            return None;
+        }
         let mut record = csv::StringRecord::new();
 
         loop {
@@ -127,64 +153,33 @@ impl<'a, R: Read> Iterator for RecordIterator<'a, R> {
                     self.reader.row_count += 1;
                     return Some(Ok(record));
                 }
-                Ok(false) => return None,
-                Err(e) => {
-                    // Handle malformed rows
-                    let line_number = self.reader.row_count + 1;
-                    if self.reader.headers.is_empty() {
-                        // No header, so line number is row count + 1
-                    } else {
-                        // With header, line number is row count + 2
+                Ok(false) => {
+                    self.reader.finished = true;
+                    return None;
+                }
+                Err(e) if matches!(e.kind(), csv::ErrorKind::UnequalLengths { .. }) => {
+                    self.reader.skipped_rows += 1;
+                    // Bound diagnostics independently of the number of bad rows.
+                    if self.reader.malformed_rows.len() < 5 {
+                        self.reader.malformed_rows.push(MalformedRow {
+                            line_number: e.position().map_or(0, |p| p.line() as usize),
+                            reason: e.to_string(),
+                        });
                     }
-
-                    self.reader.malformed_rows.push(MalformedRow {
-                        line_number: line_number + if self.reader.headers.is_empty() { 0 } else { 1 },
-                        reason: e.to_string(),
-                    });
-
-                    // Log warning and continue to next row
-                    eprintln!(
-                        "Warning: Skipping malformed row {}: {}",
-                        line_number, e
-                    );
-
-                    // Try to continue reading
-                    self.reader.row_count += 1;
-                    continue;
+                }
+                Err(e) => {
+                    // Encoding and I/O failures must not produce a successful,
+                    // partial report or an endless retry loop.
+                    self.reader.finished = true;
+                    return Some(Err(e.into()));
                 }
             }
         }
     }
 }
 
-/// Validates that the file contains valid UTF-8
-fn validate_utf8<R: Read + Seek>(reader: &mut R) -> Result<(), ReaderError> {
-    const SAMPLE_SIZE: usize = 64 * 1024; // 64KB sample
-
-    let mut sample = vec![0u8; SAMPLE_SIZE];
-    let bytes_read = reader.read(&mut sample)?;
-    sample.truncate(bytes_read);
-
-    // Check for BOM and skip if present
-    let content = if sample.starts_with(&[0xEF, 0xBB, 0xBF]) {
-        &sample[3..]
-    } else {
-        &sample[..]
-    };
-
-    // Validate UTF-8
-    std::str::from_utf8(content).map_err(|e| ReaderError::InvalidUtf8 {
-        byte_offset: e.valid_up_to(),
-    })?;
-
-    Ok(())
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum ReaderError {
-    #[error("File not found: {0}")]
-    FileNotFound(String),
-
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -194,16 +189,21 @@ pub enum ReaderError {
     #[error("Delimiter detection failed: {0}")]
     DelimiterDetection(#[from] DelimiterError),
 
-    #[error("Invalid UTF-8 encoding at byte offset {byte_offset}")]
-    InvalidUtf8 { byte_offset: usize },
+    #[error("Invalid delimiter {0:?}: use an ASCII character other than a quote, NUL, or newline")]
+    InvalidDelimiter(char),
+
+    #[error("Duplicate header {0:?}: give each column a unique name")]
+    DuplicateHeader(String),
+
+    #[error("Empty column header: name each column, or use --no-header for headerless data")]
+    EmptyHeader,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     fn create_temp_csv(content: &str) -> NamedTempFile {
         let mut file = NamedTempFile::new().unwrap();
@@ -232,7 +232,7 @@ mod tests {
         let content = "a\tb\tc\n1\t2\t3\n";
         let file = create_temp_csv(content);
 
-        let mut reader = CsvReader::open(file.path(), CsvReaderConfig::default()).unwrap();
+        let reader = CsvReader::open(file.path(), CsvReaderConfig::default()).unwrap();
 
         assert_eq!(reader.delimiter(), '\t');
         assert_eq!(reader.headers(), &["a", "b", "c"]);
@@ -250,7 +250,7 @@ mod tests {
 
         let mut reader = CsvReader::open(file.path(), config).unwrap();
 
-        assert!(reader.headers().is_empty());
+        assert_eq!(reader.headers(), &["column_0", "column_1", "column_2"]);
 
         let records: Vec<_> = reader.records().collect();
         assert_eq!(records.len(), 2);
@@ -267,7 +267,7 @@ mod tests {
             has_header: true,
         };
 
-        let mut reader = CsvReader::open(file.path(), config).unwrap();
+        let reader = CsvReader::open(file.path(), config).unwrap();
 
         assert_eq!(reader.delimiter(), ';');
         assert_eq!(reader.headers(), &["a", "b", "c"]);
@@ -281,7 +281,7 @@ mod tests {
         file.flush().unwrap();
 
         let result = CsvReader::open(file.path(), CsvReaderConfig::default());
-        assert!(matches!(result, Err(ReaderError::InvalidUtf8 { .. })));
+        assert!(matches!(result, Err(ReaderError::CsvParse(_))));
     }
 
     #[test]
@@ -293,21 +293,23 @@ mod tests {
         file.flush().unwrap();
 
         let mut reader = CsvReader::open(file.path(), CsvReaderConfig::default()).unwrap();
-        // Note: csv crate may include BOM in first header, this is expected behavior
+        assert_eq!(reader.headers(), &["a", "b", "c"]);
         let records: Vec<_> = reader.records().collect();
         assert_eq!(records.len(), 1);
     }
 
     #[test]
-    fn test_flexible_field_count() {
+    fn test_malformed_field_counts_are_skipped() {
         let content = "a,b,c\n1,2,3\n4,5\n6,7,8,9\n";
         let file = create_temp_csv(content);
 
         let mut reader = CsvReader::open(file.path(), CsvReaderConfig::default()).unwrap();
 
         let records: Vec<_> = reader.records().collect();
-        // All rows should be read due to flexible mode
-        assert_eq!(records.len(), 3);
+        assert_eq!(records.len(), 1);
+        assert_eq!(reader.skipped_rows(), 2);
+        assert_eq!(reader.malformed_rows()[0].line_number, 3);
+        assert_eq!(reader.malformed_rows()[1].line_number, 4);
     }
 
     #[test]

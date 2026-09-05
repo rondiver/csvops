@@ -1,0 +1,49 @@
+{
+  "time_column": "created_at",
+  "grain": "week",
+  "bucket_count": 2,
+  "analyzed_rows": 12,
+  "skipped_timestamp_rows": 0,
+  "skipped_malformed_rows": 0,
+  "warnings": [
+    {
+      "severity": "warning",
+      "code": "ROW_COUNT_CHANGED",
+      "message": "Row count changed 100% between 2026-W35 and 2026-W36 (4 -> 8)"
+    },
+    {
+      "severity": "warning",
+      "code": "MISSING_RATE_CHANGED",
+      "column": "quantity",
+      "message": "Missing rate changed from 0.0% to 75.0% between 2026-W35 and 2026-W36"
+    },
+    {
+      "severity": "warning",
+      "code": "MEAN_CHANGED",
+      "column": "quoted_total",
+      "message": "Mean changed 100.0% between 2026-W35 and 2026-W36 (100.00 -> 200.00)"
+    }
+  ],
+  "buckets": [
+    {
+      "key": "2026-W35",
+      "row_count": 4,
+      "missing_rates": {},
+      "numeric_means": {
+        "quantity": 1000.0,
+        "quoted_total": 100.0
+      }
+    },
+    {
+      "key": "2026-W36",
+      "row_count": 8,
+      "missing_rates": {
+        "quantity": 0.75
+      },
+      "numeric_means": {
+        "quantity": 1000.0,
+        "quoted_total": 200.0
+      }
+    }
+  ]
+}
