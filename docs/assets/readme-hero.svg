@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="360" viewBox="0 0 1120 360" role="img" aria-labelledby="title description">
+  <title id="title">csvops — inspect the export, spot the change</title>
+  <desc id="description">A local CSV inspection tool with profile and drift commands. In the included synthetic example, missing quantities rise from zero percent in week 35 to 75 percent in week 36.</desc>
+  <rect width="1120" height="360" rx="16" fill="#122a2c"/>
+  <path d="M594 36v288" stroke="#345052"/>
+  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace">
+    <text x="44" y="55" fill="#9cb9ac" font-size="13" letter-spacing="2.6">CSVOPS / LOCAL DATA TOOLS</text>
+    <text x="44" y="133" fill="#f4f0e7" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="700" letter-spacing="-1.7">Inspect the export.</text>
+    <text x="44" y="193" fill="#f4f0e7" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="700" letter-spacing="-1.7">Spot the change.</text>
+    <text x="47" y="236" fill="#b7c9c1" font-family="Arial, Helvetica, sans-serif" font-size="20">Find missing fields and changes over time.</text>
+    <rect x="44" y="274" width="125" height="40" rx="7" fill="#264346"/>
+    <text x="68" y="301" fill="#c5e0d1" font-size="19">profile</text>
+    <rect x="181" y="274" width="106" height="40" rx="7" fill="#264346"/>
+    <text x="204" y="301" fill="#c5e0d1" font-size="19">drift</text>
+    <text x="303" y="300" fill="#7fa096" font-size="13">TERMINAL + JSON</text>
+
+    <text x="633" y="59" fill="#9cb9ac" font-size="13" letter-spacing="2.2">QUANTITIES MISSING</text>
+    <rect x="631" y="89" width="186" height="156" rx="10" fill="#193638" stroke="#365154"/>
+    <text x="653" y="123" fill="#b7c9c1" font-size="16">2026-W35</text>
+    <text x="650" y="198" fill="#c5e0d1" font-family="Arial, Helvetica, sans-serif" font-size="63" font-weight="700" letter-spacing="-2">0%</text>
+    <text x="654" y="225" fill="#9cb9ac" font-size="13">0 OF 4 JOBS</text>
+
+    <path d="M833 168h21m-7-7 7 7-7 7" fill="none" stroke="#9cb9ac" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="871" y="89" width="205" height="156" rx="10" fill="#3a3830" stroke="#8c7050"/>
+    <text x="894" y="123" fill="#dec8a9" font-size="16">2026-W36</text>
+    <text x="890" y="198" fill="#efb977" font-family="Arial, Helvetica, sans-serif" font-size="63" font-weight="700" letter-spacing="-2">75%</text>
+    <text x="894" y="225" fill="#dec8a9" font-size="13">6 OF 8 JOBS</text>
+
+    <text x="633" y="288" fill="#d9e1d8" font-family="Arial, Helvetica, sans-serif" font-size="19">The CSV still parses. The data has changed.</text>
+    <text x="633" y="315" fill="#89a79c" font-size="12" letter-spacing="0.7">FROM THE INCLUDED 12-ROW SYNTHETIC EXAMPLE</text>
+  </g>
+</svg>

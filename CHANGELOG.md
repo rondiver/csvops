@@ -15,6 +15,7 @@ Prepared as a first maintained release of the existing CSV profiler and drift CL
 - Flag non-finite numeric values excluded from calculations; reject aggregate overflow instead of serializing invalid statistics.
 - Validate delimiter and sample-size arguments. Support single-column files through automatic delimiter fallback.
 - Add synthetic job data, generated example reports, CLI regression tests, installation instructions, package metadata, an MIT license, and a tracked dependency lockfile.
+- Rework the README around a visual example, reproducible commands, JSON recipes, and a separate command reference.
 - Configure formatting, strict lint, tests, and source-package verification on Linux, macOS, and Windows.
 
 Behavior changes to review when updating: statistics now exclude rows with inconsistent field counts; duplicate/blank headers fail; drift uses UTC for offset timestamps; extra row-accounting and numeric fields appear in JSON; drift warnings have dedicated codes. Existing output order and percentile estimates may change once as deterministic behavior is introduced.

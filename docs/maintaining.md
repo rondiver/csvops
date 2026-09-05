@@ -13,7 +13,7 @@ Keep changes focused on inspecting one local CSV file or comparing its time buck
 - `src/output/`: terminal and JSON profiles.
 - `tests/cli.rs`: tests that invoke the built binary on synthetic data.
 
-The README describes the supported behavior. `PRD.md` and `claude.md` contain earlier planning material, including proposed layouts, thresholds, and performance targets that do not all match the implementation. Treat those as historical design proposals when evaluating a change.
+The [README](../README.md) introduces the tool; the [command reference](reference.md) describes supported behavior and limits. `PRD.md` and `claude.md` contain earlier planning material, including proposed layouts, thresholds, and performance targets that do not all match the implementation. Treat those as historical design proposals when evaluating a change.
 
 ## Local checks
 
@@ -31,13 +31,13 @@ Use `cargo fmt --all` when changing Rust source. Keep meaningful regressions at 
 After committing a release candidate, verify the source package and an isolated installation:
 
 ```sh
-cargo package --locked
+cargo package --locked --target-dir target/package-check
 cargo install --path . --locked --root /tmp/csvops-install-check
 /tmp/csvops-install-check/bin/csvops profile examples/jobs.csv --json
 /tmp/csvops-install-check/bin/csvops drift examples/jobs.csv --time-col created_at --grain week
 ```
 
-The isolated-install example uses a Unix temporary path. On Windows choose a temporary directory and run its `bin/csvops.exe`.
+The separate package target directory keeps package verification from replacing the source checkout's build outputs. The isolated-install example uses a Unix temporary path. On Windows choose a temporary directory and run its `bin/csvops.exe`.
 
 ## Release preparation
 
